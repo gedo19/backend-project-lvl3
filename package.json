@@ -1,0 +1,36 @@
+{
+  "name": "@hexlet/code",
+  "version": "0.0.1",
+  "description": "Page loader utility",
+  "main": "bin/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gedo19/backend-project-lvl3.git"
+  },
+  "author": "gedo19",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gedo19/backend-project-lvl3/issues"
+  },
+  "homepage": "https://github.com/gedo19/backend-project-lvl3#readme",
+  "bin": {
+    "page-loader": "bin/index.js"
+  },
+  "devDependencies": {
+    "eslint": "^8.8.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.25.4",
+    "eslint-plugin-jest": "^26.0.0",
+    "jest": "^27.5.0",
+    "jest-cli": "^27.5.0",
+    "nock": "^13.2.4"
+  },
+  "dependencies": {
+    "axios": "^0.25.0",
+    "commander": "^9.0.0"
+  }
+}
