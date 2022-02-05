@@ -10,18 +10,10 @@ const buildFilename = (url) => {
 
 export default (url, dir) => axios.get(url)
   .catch((error) => {
-    if (error.response) {
-      throw new Error(`Fail! Server responded with a status code ${error.response.status}`);
-    }
-
-    if (error.request) {
-      throw new Error('Fail! The request was made but no response was received!');
-    }
-
-    throw new Error(`Fail! ${error.message}!`);
+    throw new Error(`${error.message}!`);
   })
-  .then((response) => response.data)
-  .then((data) => {
+  .then((response) => {
     const filepath = path.join(dir, buildFilename(url));
+    const { data } = response;
     return fs.writeFile(filepath, data).then(() => filepath);
   });
