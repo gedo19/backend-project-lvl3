@@ -14,15 +14,15 @@ const getNameByUrl = (url) => {
 };
 
 const getFilepath = {
-  files: (outputPath, url) => {
+  fileDir: (outputPath, url) => {
     const filepath = path.join(outputPath, getNameByUrl(url));
     return `${filepath}_files`;
   },
-  img: (outputPath, url) => {
+  file: (outputPath, url) => {
     const { dir, ext, name } = path.parse(url.href);
     const urlWithoutExtname = new URL(path.join(dir, name));
     const filepath = path.join(outputPath, getNameByUrl(urlWithoutExtname));
-    return `${filepath}${ext || '.png'}`;
+    return `${filepath}${ext}`;
   },
   html: (outputPath, url) => {
     const filepath = path.join(outputPath, getNameByUrl(url));
@@ -30,46 +30,87 @@ const getFilepath = {
   },
 };
 
-const vars = {};
+const extractDomainUrls = (html, url, tagsAndAttrs) => {
+  const $ = cheerio.load(html);
+  const { host } = url;
 
-export default (url, outputPath) => axios.get(url)
-  .catch((e) => {
-    throw new Error(e.message);
-  })
-  .then(({ data }) => {
-    vars.url = new URL(url);
-    vars.data = data;
-    vars.filesDirpath = getFilepath.files(outputPath, vars.url);
-    vars.filesRelDirpath = getFilepath.files('', vars.url);
+  return tagsAndAttrs.flatMap(([tag, attr]) => $(tag)
+    // eslint-disable-next-line func-names
+    .map(function () {
+      const src = $(this).attr(attr);
+      const srcUrl = new URL(src, url);
+      return srcUrl.host === host ? srcUrl : null;
+    })
+    .toArray()
+    .filter((srcUrl) => srcUrl));
+};
 
-    return fs.mkdir(vars.filesDirpath);
-  })
-  .then(() => {
-    const promises = [];
-    const $ = cheerio.load(vars.data);
-    $('img')
+const downloadFiles = (urls, dir) => {
+  const promises = urls
+    .map((url) => axios({
+      method: 'get',
+      url: url.toString(),
+      responseType: 'arraybuffer',
+    })
+      .then(({ data }) => {
+        const filepath = getFilepath.file(dir, url);
+
+        return fs.writeFile(filepath, data);
+      }));
+
+  return Promise.allSettled(promises);
+};
+
+const replaceDomainUrls = (html, url, dir, tagsAndAttrs) => {
+  const $ = cheerio.load(html);
+  const { host } = url;
+
+  tagsAndAttrs.forEach(([tag, attr]) => {
+    $(tag)
       // eslint-disable-next-line func-names
       .each(function () {
-        const src = $(this).attr('src');
-        const imgUrl = new URL(src, vars.url);
-        if (imgUrl.host === vars.url.host) {
-          const filepath = getFilepath.img(vars.filesDirpath, imgUrl);
-          const relFilepath = getFilepath.img(vars.filesRelDirpath, imgUrl);
-
-          const promise = axios({
-            method: 'get',
-            url: imgUrl.href,
-            responseType: 'arraybuffer',
-          }).then(({ data }) => {
-            $(this).attr('src', relFilepath);
-            return fs.writeFile(filepath, data);
-          });
-          promises.push(promise);
+        const src = $(this).attr(attr);
+        const srcUrl = new URL(src, url);
+        if (srcUrl.host === host) {
+          $(this).attr(attr, getFilepath.file(dir, srcUrl));
         }
       });
-    return Promise.all(promises).then(() => $.html());
-  })
-  .then((html) => {
-    const filepath = getFilepath.html(outputPath, vars.url);
-    return fs.writeFile(filepath, prettier.format(html, { parser: 'html' })).then(() => filepath);
   });
+
+  return $.html();
+};
+
+export default (url, outputPath) => {
+  const tagsAndAttrs = [
+    ['link', 'href'],
+    ['script', 'src'],
+    ['img', 'src'],
+  ];
+
+  const vars = {};
+
+  return axios.get(url)
+    .catch((e) => {
+      throw new Error(e.message);
+    })
+    .then(({ data }) => {
+      vars.url = new URL(url);
+      vars.data = data;
+      vars.filesDirpath = getFilepath.fileDir(outputPath, vars.url);
+      vars.filesRelDirpath = getFilepath.fileDir('', vars.url);
+
+      return fs.mkdir(vars.filesDirpath);
+    })
+    .then(() => {
+      const domainUrls = extractDomainUrls(vars.data, vars.url, tagsAndAttrs);
+
+      return downloadFiles(domainUrls, vars.filesDirpath);
+    })
+    .then(() => {
+      const html = replaceDomainUrls(vars.data, vars.url, vars.filesRelDirpath, tagsAndAttrs);
+      const prettifiedHtml = prettier.format(html, { parser: 'html' });
+      const filepath = getFilepath.html(outputPath, vars.url);
+
+      return fs.writeFile(filepath, prettifiedHtml).then(() => filepath);
+    });
+};
