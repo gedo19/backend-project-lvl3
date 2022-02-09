@@ -3,74 +3,76 @@ import * as cheerio from 'cheerio';
 import fs from 'fs/promises';
 import * as path from 'path';
 import prettier from 'prettier';
-// import debug from 'debug';
-// import axiosDebugLog from 'axios-debug-log';
-import {
-  makeFilename,
-  makePagename,
-  makeFoldername,
-} from './localnameMakers.js';
 
-const isLocalUrl = (url, localUrl) => url.host === localUrl.host;
-const isCanonical = (tag) => tag.attr('rel') === 'canonical';
+const getNameByUrl = (url) => {
+  const { protocol } = url;
+  const regex = new RegExp(`${protocol}//`);
+  const urlWithoutProtocol = url.href.replace(regex, '');
+  return urlWithoutProtocol
+    .replace(/\/$/, '')
+    .replace(/[^a-z0-9]/gi, '-');
+};
 
-const tagsAndAttrs = [
-  ['img', 'src'],
-  ['script', 'src'],
-  ['link', 'href'],
-];
+const getFilepath = {
+  fileDir: (outputPath, url) => {
+    const filepath = path.join(outputPath, getNameByUrl(url));
+    return `${filepath}_files`;
+  },
+  file: (outputPath, url) => {
+    const { dir, ext, name } = path.parse(url.href);
+    const urlWithoutExtname = new URL(path.join(dir, name));
+    const filepath = path.join(outputPath, getNameByUrl(urlWithoutExtname));
+    return `${filepath}${ext}`;
+  },
+  html: (outputPath, url) => {
+    const filepath = path.join(outputPath, getNameByUrl(url));
+    return `${filepath}.html`;
+  },
+};
 
-const extractLocalUrls = (html, baseUrl) => {
+const extractDomainUrls = (html, url, tagsAndAttrs) => {
   const $ = cheerio.load(html);
+  const { host } = url;
 
   return tagsAndAttrs.flatMap(([tag, attr]) => $(tag)
-    .map((_i, el) => {
-      const element = $(el);
-      const src = element.attr(attr);
-      const srcUrl = new URL(src, baseUrl);
-      if (isLocalUrl(baseUrl, srcUrl)) {
-        return isCanonical(element) ? { url: srcUrl, type: 'page' } : { url: srcUrl, type: 'file' };
-      }
-
-      return null;
+    // eslint-disable-next-line func-names
+    .map(function () {
+      const src = $(this).attr(attr);
+      const srcUrl = new URL(src, url);
+      return srcUrl.host === host ? srcUrl : null;
     })
     .toArray()
     .filter((srcUrl) => srcUrl));
 };
 
-const loadFiles = (urls, outputPath) => {
-  const mapping = {
-    page: (url, dir) => path.join(dir, makePagename(url)),
-    file: (url, dir) => path.join(dir, makeFilename(url)),
-  };
-
+const downloadFiles = (urls, dir) => {
   const promises = urls
-    .map(({ url, type }) => axios({
+    .map((url) => axios({
       method: 'get',
       url: url.toString(),
       responseType: 'arraybuffer',
     })
       .then(({ data }) => {
-        const filepath = mapping[type](url, outputPath);
+        const filepath = getFilepath.file(dir, url);
 
         return fs.writeFile(filepath, data);
       }));
 
-  return Promise.all(promises);
+  return Promise.allSettled(promises);
 };
 
-const replaceDomainUrls = (html, baseUrl, outputPath) => {
+const replaceDomainUrls = (html, url, dir, tagsAndAttrs) => {
   const $ = cheerio.load(html);
+  const { host } = url;
 
   tagsAndAttrs.forEach(([tag, attr]) => {
     $(tag)
-      .each((_i, el) => {
-        const element = $(el);
-        const src = element.attr(attr);
-        const srcUrl = new URL(src, baseUrl);
-        if (isLocalUrl(srcUrl, baseUrl)) {
-          const filename = isCanonical(element) ? makePagename(srcUrl) : makeFilename(srcUrl);
-          element.attr(attr, path.join(outputPath, filename));
+      // eslint-disable-next-line func-names
+      .each(function () {
+        const src = $(this).attr(attr);
+        const srcUrl = new URL(src, url);
+        if (srcUrl.host === host) {
+          $(this).attr(attr, getFilepath.file(dir, srcUrl));
         }
       });
   });
@@ -79,30 +81,36 @@ const replaceDomainUrls = (html, baseUrl, outputPath) => {
 };
 
 export default (url, outputPath) => {
-  const baseUrl = new URL(url);
-  let html;
-  const htmlFilename = makePagename(baseUrl);
-  const htmlFilepath = path.join(outputPath, htmlFilename);
-  const filesFoldername = makeFoldername(baseUrl);
-  const filesFolderpath = path.join(outputPath, filesFoldername);
+  const tagsAndAttrs = [
+    ['link', 'href'],
+    ['script', 'src'],
+    ['img', 'src'],
+  ];
+
+  const vars = {};
 
   return axios.get(url)
     .catch((e) => {
       throw new Error(e.message);
     })
     .then(({ data }) => {
-      html = data;
+      vars.url = new URL(url);
+      vars.data = data;
+      vars.filesDirpath = getFilepath.fileDir(outputPath, vars.url);
+      vars.filesRelDirpath = getFilepath.fileDir('', vars.url);
 
-      return fs.mkdir(filesFolderpath);
+      return fs.mkdir(vars.filesDirpath);
     })
     .then(() => {
-      const localUrls = extractLocalUrls(html, baseUrl);
+      const domainUrls = extractDomainUrls(vars.data, vars.url, tagsAndAttrs);
 
-      return loadFiles(localUrls, filesFolderpath);
+      return downloadFiles(domainUrls, vars.filesDirpath);
     })
     .then(() => {
-      const dom = replaceDomainUrls(html, baseUrl, filesFoldername);
-      const prettifiedHtml = prettier.format(dom, { parser: 'html' });
-      return fs.writeFile(htmlFilepath, prettifiedHtml).then(() => htmlFilepath);
+      const html = replaceDomainUrls(vars.data, vars.url, vars.filesRelDirpath, tagsAndAttrs);
+      const prettifiedHtml = prettier.format(html, { parser: 'html' });
+      const filepath = getFilepath.html(outputPath, vars.url);
+
+      return fs.writeFile(filepath, prettifiedHtml).then(() => filepath);
     });
 };
