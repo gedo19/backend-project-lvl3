@@ -1,108 +1,84 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 import fs from 'fs/promises';
-import * as path from 'path';
-import prettier from 'prettier';
-// import debug from 'debug';
-// import axiosDebugLog from 'axios-debug-log';
+import pretty from 'pretty';
+import Listr from 'listr';
+import debug from 'debug';
+import { getFilename, getPath } from './pathUtils.js';
 import {
-  makeFilename,
-  makePagename,
-  makeFoldername,
-} from './localnameMakers.js';
+  replaceLocalUrls,
+  extractLocalUrls,
+} from './pageProcessors.js';
 
-const isLocalUrl = (url, localUrl) => url.host === localUrl.host;
-const isCanonical = (tag) => tag.attr('rel') === 'canonical';
+const log = debug('page-loader');
 
-const tagsAndAttrs = [
-  ['img', 'src'],
-  ['script', 'src'],
-  ['link', 'href'],
-];
+const handleError = (error) => {
+  if (error.isAxiosError) {
+    if (error.response) {
+      throw new Error(`Error requesting ${error.config.url} with status code ${error.response.status}`);
+    }
+    throw new Error(`The request was made at ${error.config.url} but no response was received`);
+  }
 
-const extractLocalUrls = (html, baseUrl) => {
-  const $ = cheerio.load(html);
-
-  return tagsAndAttrs.flatMap(([tag, attr]) => $(tag)
-    .map((_i, el) => {
-      const element = $(el);
-      const src = element.attr(attr);
-      const srcUrl = new URL(src, baseUrl);
-      if (isLocalUrl(baseUrl, srcUrl)) {
-        return isCanonical(element) ? { url: srcUrl, type: 'page' } : { url: srcUrl, type: 'file' };
-      }
-
-      return null;
-    })
-    .toArray()
-    .filter((srcUrl) => srcUrl));
+  throw error;
 };
 
-const loadFiles = (urls, outputPath) => {
+const loadResources = (urls, outputPath) => {
   const mapping = {
-    page: (url, dir) => path.join(dir, makePagename(url)),
-    file: (url, dir) => path.join(dir, makeFilename(url)),
+    page: (url, dir) => getPath(dir, getFilename(url, 'page')),
+    file: (url, dir) => getPath(dir, getFilename(url, 'file')),
   };
+  const tasks = new Listr(
+    urls
+      .map(({ url, type }) => {
+        log(`GET ${url}`);
+        const task = axios({
+          method: 'get',
+          url: url.href,
+          responseType: 'arraybuffer',
+        })
+          .then(({ data }) => {
+            const filepath = mapping[type](url, outputPath);
+            log(`Saving file: ${filepath}`);
+            return fs.writeFile(filepath, data);
+          })
+          .catch(handleError);
 
-  const promises = urls
-    .map(({ url, type }) => axios({
-      method: 'get',
-      url: url.toString(),
-      responseType: 'arraybuffer',
-    })
-      .then(({ data }) => {
-        const filepath = mapping[type](url, outputPath);
+        return { title: url.href, task: () => task };
+      }),
+    { concurrent: true },
+  );
 
-        return fs.writeFile(filepath, data);
-      }));
-
-  return Promise.all(promises);
-};
-
-const replaceDomainUrls = (html, baseUrl, outputPath) => {
-  const $ = cheerio.load(html);
-
-  tagsAndAttrs.forEach(([tag, attr]) => {
-    $(tag)
-      .each((_i, el) => {
-        const element = $(el);
-        const src = element.attr(attr);
-        const srcUrl = new URL(src, baseUrl);
-        if (isLocalUrl(srcUrl, baseUrl)) {
-          const filename = isCanonical(element) ? makePagename(srcUrl) : makeFilename(srcUrl);
-          element.attr(attr, path.join(outputPath, filename));
-        }
-      });
-  });
-
-  return $.html();
+  return tasks.run();
 };
 
 export default (url, outputPath) => {
   const baseUrl = new URL(url);
-  let html;
-  const htmlFilename = makePagename(baseUrl);
-  const htmlFilepath = path.join(outputPath, htmlFilename);
-  const filesFoldername = makeFoldername(baseUrl);
-  const filesFolderpath = path.join(outputPath, filesFoldername);
 
+  let data;
+  const resourcesFolderName = getFilename(baseUrl, 'folder');
+  const resourcesFolderPath = getPath(outputPath, resourcesFolderName);
+
+  log(`GET ${url}`);
   return axios.get(url)
-    .catch((e) => {
-      throw new Error(e.message);
-    })
-    .then(({ data }) => {
-      html = data;
-
-      return fs.mkdir(filesFolderpath);
+    .catch(handleError)
+    .then((res) => {
+      data = res.data;
+      log(`Making folder: ${resourcesFolderPath}`);
+      return fs.mkdir(resourcesFolderPath).catch(handleError);
     })
     .then(() => {
-      const localUrls = extractLocalUrls(html, baseUrl);
+      log('Extracting local urls.');
+      const localUrls = extractLocalUrls(data, baseUrl);
 
-      return loadFiles(localUrls, filesFolderpath);
+      log('Downloading resources.');
+      return loadResources(localUrls, resourcesFolderPath);
     })
     .then(() => {
-      const dom = replaceDomainUrls(html, baseUrl, filesFoldername);
-      const prettifiedHtml = prettier.format(dom, { parser: 'html' });
-      return fs.writeFile(htmlFilepath, prettifiedHtml).then(() => htmlFilepath);
+      const html = replaceLocalUrls(data, baseUrl, resourcesFolderName);
+      const prettifiedHtml = pretty(html);
+      const pageFilepath = getPath(outputPath, getFilename(baseUrl, 'page'));
+      log(`Saving file: ${pageFilepath}`);
+
+      return fs.writeFile(pageFilepath, prettifiedHtml).then(() => pageFilepath).catch(handleError);
     });
 };

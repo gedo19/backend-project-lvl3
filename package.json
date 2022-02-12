@@ -35,6 +35,7 @@
     "cheerio": "^1.0.0-rc.10",
     "commander": "^9.0.0",
     "debug": "^4.3.3",
-    "prettier": "^2.5.1"
+    "listr": "^0.14.3",
+    "pretty": "^2.0.0"
   }
 }

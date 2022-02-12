@@ -12,7 +12,12 @@ program
   .version('0.0.1')
   .option('-o, --output [dir]', 'output dir', process.cwd())
   .action((url) => {
-    pageLoader(url, program.opts().output).then(console.log);
+    pageLoader(url, program.opts().output)
+      .then(console.log)
+      .catch((e) => {
+        console.error(e.message);
+        process.exit(1);
+      });
   });
 
 program.parse();
