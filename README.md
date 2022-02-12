@@ -11,7 +11,7 @@
 </div>
 
 ## About Page Loader
-Page Loader is an open-source console tool for downloading page with it resources.
+Page Loader is an open-source console tool for downloading page with its resources.
 
 Features:
 - You can choose output directory
@@ -63,3 +63,10 @@ Options:
 [![asciicast](https://asciinema.org/a/468511.svg)](https://asciinema.org/a/468511)
 
 ### Downloading page
+[![asciicast](https://asciinema.org/a/468513.svg)](https://asciinema.org/a/468513)
+
+### Errors
+[![asciicast](https://asciinema.org/a/468516.svg)](https://asciinema.org/a/468516)
+
+### Debug
+[![asciicast](https://asciinema.org/a/468528.svg)](https://asciinema.org/a/468528)
