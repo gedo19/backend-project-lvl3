@@ -2,7 +2,7 @@
   "name": "@hexlet/code",
   "version": "0.0.1",
   "description": "Page loader utility",
-  "main": "bin/index.js",
+  "main": "src/pageLoader.js",
   "type": "module",
   "scripts": {
     "test": "jest"
