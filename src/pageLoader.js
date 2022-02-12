@@ -15,7 +15,7 @@ const isDebugEnv = process.env.DEBUG;
 const handleError = (error) => {
   if (error.isAxiosError) {
     if (error.response) {
-      throw new Error(`Error requesting ${error.config.url} with status code ${error.response.status}`);
+      throw new Error(`'${error.config.url}' request failed with status code ${error.response.status}`);
     }
     throw new Error(`The request was made at ${error.config.url} but no response was received`);
   }
@@ -62,6 +62,7 @@ const loadResources = (urls, outputPath) => {
     {
       concurrent: true,
       renderer: isDebugEnv ? 'silent' : 'default',
+      exitOnError: false,
     },
   );
 
@@ -77,11 +78,10 @@ export default (url, outputPath = process.cwd()) => {
 
   log(`Requesting '${url}'`);
   return axios.get(url)
-    .catch(handleError)
     .then((res) => {
       data = res.data;
       log(`Making folder '${resourcesFolderPath}'`);
-      return fs.mkdir(resourcesFolderPath).catch(handleError);
+      return fs.mkdir(resourcesFolderPath);
     })
     .then(() => {
       log('Extracting local urls.');
@@ -96,6 +96,7 @@ export default (url, outputPath = process.cwd()) => {
       const pageFilepath = getPath(outputPath, getFilename(baseUrl, 'page'));
       log(`Saving file '${pageFilepath}'`);
 
-      return fs.writeFile(pageFilepath, prettifiedHtml).then(() => pageFilepath).catch(handleError);
-    });
+      return fs.writeFile(pageFilepath, prettifiedHtml).then(() => pageFilepath);
+    })
+    .catch(handleError);
 };
