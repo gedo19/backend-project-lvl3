@@ -1,6 +1,6 @@
 import axios from 'axios';
 import fs from 'fs/promises';
-import pretty from 'pretty';
+import prettier from 'prettier';
 import Listr from 'listr';
 import debug from 'debug';
 import { getFilename, getPath } from './pathUtils.js';
@@ -75,7 +75,7 @@ export default (url, outputPath) => {
     })
     .then(() => {
       const html = replaceLocalUrls(data, baseUrl, resourcesFolderName);
-      const prettifiedHtml = pretty(html);
+      const prettifiedHtml = prettier.format(html, { parser: 'html' });
       const pageFilepath = getPath(outputPath, getFilename(baseUrl, 'page'));
       log(`Saving file: ${pageFilepath}`);
 
