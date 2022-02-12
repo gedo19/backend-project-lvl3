@@ -70,8 +70,8 @@ describe('Should trow errors', () => {
 
     expect.assertions(3);
     await expect(pageLoader('https://wrong.url.wrong/no-response', outputPath)).rejects.toThrow('The request was made at https://wrong.url.wrong/no-response but no response was received');
-    await expect(pageLoader('https://wrong.url.wrong/404', outputPath)).rejects.toThrow('Error requesting https://wrong.url.wrong/404 with status code 404');
-    await expect(pageLoader('https://wrong.url.wrong/500', outputPath)).rejects.toThrow('Error requesting https://wrong.url.wrong/500 with status code 500');
+    await expect(pageLoader('https://wrong.url.wrong/404', outputPath)).rejects.toThrow('\'https://wrong.url.wrong/404\' request failed with status code 404');
+    await expect(pageLoader('https://wrong.url.wrong/500', outputPath)).rejects.toThrow('\'https://wrong.url.wrong/500\' request failed with status code 500');
   });
 
   test('Fs errors', async () => {
