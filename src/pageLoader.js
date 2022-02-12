@@ -51,7 +51,7 @@ const loadResources = (urls, outputPath) => {
   return tasks.run();
 };
 
-export default (url, outputPath) => {
+export default (url, outputPath = process.cwd()) => {
   const baseUrl = new URL(url);
 
   let data;
