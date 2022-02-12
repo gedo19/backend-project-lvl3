@@ -32,16 +32,16 @@ What I learned from this project:
 
 ## Getting started
 - Clone the repository
-```
+```cmd
 git clone git@github.com:gedo19/backend-project-lvl3.git
 ```
 - Install dependencies
-```
+```cmd
 cd backend-project-lvl3
 make install
 ```
 - Install project
-```
+```cmd
 npm ci
 ```
 
