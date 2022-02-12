@@ -20,7 +20,7 @@ Features:
 
 ## About this project
 
-This project was created as part of the [Hexlet](ru.hexlet.io) curriculum.
+This project was created as part of the [Hexlet](https://ru.hexlet.io/) curriculum.
 
 What I learned from this project:
 - Promises
